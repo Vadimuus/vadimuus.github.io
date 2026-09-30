@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>GPU Lag Machine</title>
+<meta name="theme-color" content="#05050d"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<style>
+html,body{margin:0;height:100%;background:#05050d;overflow:hidden;font:13px system-ui,sans-serif;color:#dde}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+#hud{position:fixed;top:max(8px,env(safe-area-inset-top));left:8px;width:min(92vw,310px);background:#0a0c16d0;border-radius:12px;padding:10px;box-sizing:border-box}
+#hud b{color:#ff5a78;font-size:15px}#hud label{display:block;margin-top:6px}
+#hud span{float:right;color:#9ab}input[type=range]{width:100%}
+.row{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+button{background:#232842;color:#eef;border:0;border-radius:8px;padding:7px 10px;font:inherit}
+button.on{background:#ff5a78;color:#fff}#hide{float:right;padding:2px 9px}
+button{touch-action:manipulation;user-select:none;-webkit-user-select:none}
+#tb{position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:none;flex-wrap:wrap;justify-content:center;gap:8px;width:max-content;max-width:96vw;background:#0a0c16d0;padding:8px;border-radius:14px}
+#tb button{min-width:64px;min-height:50px;font-size:15px}
+small{display:block;margin-top:8px;color:#89a;line-height:1.35}#info{margin-top:8px;color:#bcd}
+#err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;font-size:16px}
+</style></head><body>
+<canvas id="c"></canvas><div id="err"></div>
+<div id="tb"><button id="grab2">✋ Grab</button><button id="zi">Zoom +</button><button id="zo">Zoom −</button><button id="ri">Size +</button><button id="ro">Size −</button><button id="bm">💥 Boom</button></div>
+<div id="hud"><b>GPU LAG MACHINE</b><button id="hide">–</button>
+<div id="body">
+<label>Balls<span id="vn"></span><input id="n" type="range" min="0" max="1000"></label>
+<label>Spawn / sec<span id="vr"></span><input id="r" type="range" min="0" max="1000"></label>
+<label>Speed<span id="vs"></span><input id="s" type="range" min="0" max="1000"></label>
+<label>Substeps<span id="vk"></span><input id="k" type="range" min="1" max="6" value="2"></label>
+<label>Grab radius<span id="vg"></span><input id="g" type="range" min="1" max="30" step="0.5" value="5"></label>
+<div class="row"><button id="inf">Infinite: off</button><button id="grav" class="on">Gravity: on</button>
+<button id="grab">Grab: off</button><button id="boom">Boom</button><button id="reset">Reset</button><button id="tbtn">Touch buttons: off</button></div>
+<div id="info"></div>
+<small>Mouse: left-drag orbit · right-drag grab balls · wheel zoom (wheel while grabbing = radius)<br>Touch: use the buttons at the bottom (Grab = one finger drags balls, Size = grab radius) · drag orbit · pinch zoom · two-finger drag also orbits</small>
+</div></div>
+<script>
+const MAX=1000000,BOX=25,R=0.18,CELL=2*R*1.4+0.01,GX=Math.floor(2*BOX/CELL)+1,GY=64,GZ=GX,NC=GX*GY*GZ,CAP=16,DT=1/120,FOV=Math.PI/3;
+const $=id=>document.getElementById(id),cv=$('c'),clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const lg=(v,lo,hi)=>Math.round(lo*Math.pow(hi/lo,v/1000));
+const cntV=()=>lg(+$('n').value,1000,MAX),rateV=()=>lg(+$('r').value,100,500000),speedV=()=>0.1*Math.pow(40,$('s').value/1000);
+$('n').value=1000*Math.log(50)/Math.log(1000);$('r').value=1000*Math.log(200)/Math.log(5000);$('s').value=1000*Math.log(10)/Math.log(40);
+const st={inf:false,grav:true,grab:false,tb:matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0};let boom=0,doReset=false;
+function hud(){$('vn').textContent=st.inf?'∞':cntV().toLocaleString();$('vr').textContent=rateV().toLocaleString();
+$('vs').textContent=speedV().toFixed(2)+'x';$('vk').textContent=$('k').value;$('vg').textContent=$('g').value}
+document.querySelectorAll('input').forEach(i=>i.oninput=hud);hud();
+const tog=(id,k,l)=>$(id).onclick=()=>{st[k]=!st[k];$(id).classList.toggle('on',st[k]);$(id).textContent=l+': '+(st[k]?'on':'off');hud()};
+tog('inf','inf','Infinite');tog('grav','grav','Gravity');tog('grab','grab','Grab');tog('tbtn','tb','Touch buttons');
+const showTb=()=>{$('tb').style.display=st.tb?'flex':'none';$('tbtn').classList.toggle('on',st.tb);$('tbtn').textContent='Touch buttons: '+(st.tb?'on':'off')};
+$('tbtn').addEventListener('click',showTb);showTb();
+$('grab').addEventListener('click',()=>$('grab2').classList.toggle('on',st.grab));$('grab2').onclick=()=>$('grab').click();
+$('boom').onclick=()=>boom=25;$('reset').onclick=()=>doReset=true;
+$('hide').onclick=()=>{const b=$('body');b.style.display=b.style.display=='none'?'':'none'};
+addEventListener('keydown',e=>{if(e.code=='Space'){boom=25;e.preventDefault()}if(e.key=='g')$('grav').click();if(e.key=='i')$('inf').click();if(e.key=='r')doReset=true});
+
+// ---- tiny math (row-major 4x4)
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],
+nrm=a=>{const l=Math.hypot(...a);return a.map(x=>x/l)};
+const mul=(A,B)=>{const o=Array(16).fill(0);for(let i=0;i<4;i++)for(let j=0;j<4;j++)for(let k=0;k<4;k++)o[i*4+j]+=A[i*4+k]*B[k*4+j];return o};
+let yaw=.7,pitch=.45,dist=55;
+function cam(){
+ const eye=[dist*Math.cos(pitch)*Math.sin(yaw),2+dist*Math.sin(pitch),dist*Math.cos(pitch)*Math.cos(yaw)];
+ const f=nrm(sub([0,3,0],eye)),r=nrm(cross(f,[0,1,0])),u=cross(r,f),a=cv.width/cv.height,t=1/Math.tan(FOV/2),n=.1,fa=500;
+ const V=[...r,-dot(r,eye),...u,-dot(u,eye),-f[0],-f[1],-f[2],dot(f,eye),0,0,0,1];
+ const P=[t/a,0,0,0,0,t,0,0,0,0,fa/(n-fa),n*fa/(n-fa),0,0,-1,0],M=mul(P,V),c=new Float32Array(16);
+ for(let i=0;i<4;i++)for(let j=0;j<4;j++)c[j*4+i]=M[i*4+j];
+ return{eye,f,r,u,mvp:c};
+}
+function ray(mx,my){const{eye,f,r,u}=cam(),th=Math.tan(FOV/2),a=cv.width/cv.height,nx=2*mx/innerWidth-1,ny=1-2*my/innerHeight;
+ return{eye,f,d:nrm([0,1,2].map(i=>f[i]+r[i]*nx*th*a+u[i]*ny*th))}}
+
+// ---- input (mouse + touch)
+const ptrs=new Map();let grabbing=false,gsx=0,gsy=0,gdepth=55,pinch=0;
+const pd=()=>{const [a,b]=[...ptrs.values()];return Math.hypot(a.x-b.x,a.y-b.y)||1};
+cv.oncontextmenu=e=>e.preventDefault();
+cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);
+ const m=e.pointerType=='mouse'?(e.button==2?'g':'o'):(st.grab?'g':'o');ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,m});
+ if(ptrs.size==2){pinch=pd();grabbing=false}
+ else if(m=='g'){const q=ray(e.clientX,e.clientY);gdepth=clamp(q.d[1]<-1e-4?(-q.eye[1]/q.d[1])*dot(q.d,q.f):dist,3,300);gsx=e.clientX;gsy=e.clientY;grabbing=true}};
+cv.onpointermove=e=>{const p=ptrs.get(e.pointerId);if(!p)return;const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+ if(ptrs.size==2){const d=pd();dist=clamp(dist*pinch/d,5,200);pinch=d;yaw-=dx*.003;pitch=clamp(pitch+dy*.003,.02,1.5)}
+ else if(p.m=='g'){gsx=e.clientX;gsy=e.clientY}
+ else{yaw-=dx*.006;pitch=clamp(pitch+dy*.006,.02,1.5)}};
+cv.onpointerup=cv.onpointercancel=e=>{const p=ptrs.get(e.pointerId);if(p&&p.m=='g')grabbing=false;ptrs.delete(e.pointerId)};
+cv.onwheel=e=>{e.preventDefault();const s=Math.sign(e.deltaY);
+ if(grabbing){$('g').value=clamp($('g').value*Math.pow(1.1,-s),1,30);hud()}else dist=clamp(dist*Math.pow(1.1,s),5,200)};
+const hold=(id,fn)=>{const b=$(id);let t;const stop=()=>clearInterval(t);b.onpointerdown=e=>{e.preventDefault();fn();clearInterval(t);t=setInterval(fn,40)};b.onpointerup=b.onpointercancel=b.onpointerleave=stop};
+hold('zi',()=>dist=clamp(dist*.97,5,200));hold('zo',()=>dist=clamp(dist/.97,5,200));
+hold('ri',()=>{$('g').value=clamp(+$('g').value*1.03,1,30);hud()});hold('ro',()=>{$('g').value=clamp(+$('g').value/1.03,1,30);hud()});
+$('bm').onclick=()=>boom=25;
+
+// ---- WGSL
+const S=`struct P{alive:u32,ring:u32,spawn_start:u32,spawn_n:u32,frame:u32,ncells:u32,dx:u32,dy:u32,dz:u32,dt:f32,gravity:f32,box:f32,base_r:f32,boom:f32,grab_on:f32,grab_r:f32,cell:f32,gx:f32,gy:f32,gz:f32};
+@group(0) @binding(0) var<uniform> u:P;
+const CAP=${CAP}u;
+fn dims()->vec3i{return vec3i(i32(u.dx),i32(u.dy),i32(u.dz));}
+fn cellOf(p:vec3f)->vec3i{return clamp(vec3i(floor((p+vec3f(u.box,0.,u.box))/u.cell)),vec3i(0),dims()-vec3i(1));}
+fn cid(c:vec3i)->u32{return u32(c.x+i32(u.dx)*(c.y+i32(u.dy)*c.z));}
+`;
+const CLEAR=S+`@group(0) @binding(1) var<storage,read_write> counts:array<atomic<u32>>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) g:vec3u){if(g.x<u.ncells){atomicStore(&counts[g.x],0u);}}`;
+const BUILD=S+`@group(0) @binding(1) var<storage,read> pin:array<vec4f>;
+@group(0) @binding(2) var<storage,read_write> counts:array<atomic<u32>>;
+@group(0) @binding(3) var<storage,read_write> slots:array<u32>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) g:vec3u){
+ let i=g.x;if(i>=u.alive){return;}
+ if((i+u.ring-u.spawn_start)%u.ring<u.spawn_n){return;}
+ let id=cid(cellOf(pin[i].xyz));let s=atomicAdd(&counts[id],1u);
+ if(s<CAP){slots[id*CAP+s]=i;}}`;
+const PHYS=S+`@group(0) @binding(1) var<storage,read> pin:array<vec4f>;
+@group(0) @binding(2) var<storage,read> vin:array<vec4f>;
+@group(0) @binding(3) var<storage,read_write> pout:array<vec4f>;
+@group(0) @binding(4) var<storage,read_write> vout:array<vec4f>;
+@group(0) @binding(5) var<storage,read> counts:array<u32>;
+@group(0) @binding(6) var<storage,read> slots:array<u32>;
+fn pcg(v:u32)->u32{let s=v*747796405u+2891336237u;let w=((s>>((s>>28u)+4u))^s)*277803737u;return (w>>22u)^w;}
+fn rnd(st:ptr<function,u32>)->f32{*st=pcg(*st);return f32(*st)/4294967295.;}
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) g:vec3u){
+ let i=g.x;if(i>=u.alive){return;}
+ var pp=pin[i].xyz;var rad=pin[i].w;var vv=vin[i].xyz;var seed=vin[i].w;
+ if((i+u.ring-u.spawn_start)%u.ring<u.spawn_n){
+  var st=i*9781u+u.frame*6271u+12345u;
+  let a=rnd(&st)*6.2831853;let rr=sqrt(rnd(&st))*u.box*.85;let y=8.+rnd(&st)*u.box*.8;
+  pp=vec3f(cos(a)*rr,y,sin(a)*rr);rad=u.base_r*(.6+.8*rnd(&st));
+  let a1=rnd(&st)-.5;let a2=rnd(&st)-.5;let a3=rnd(&st)-.5;vv=vec3f(a1,a2,a3)*6.;seed=rnd(&st);}
+ vv.y-=u.gravity*u.dt;
+ if(u.grab_on>.5){let gd=vec3f(u.gx,u.gy,u.gz)-pp;if(length(gd)<u.grab_r){vv+=gd*90.*u.dt;vv*=max(0.,1.-10.*u.dt);}}
+ if(u.boom>0.){vv+=normalize(pp-vec3f(0.,1.,0.)+vec3f(0.,.05,0.))*u.boom;}
+ let c=cellOf(pp);var corr=vec3f(0.);var dv=vec3f(0.);
+ for(var z=-1;z<=1;z++){for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){
+  let nc=c+vec3i(x,y,z);
+  if(any(nc<vec3i(0))||any(nc>=dims())){continue;}
+  let id=cid(nc);let cnt=min(counts[id],CAP);
+  for(var s=0u;s<cnt;s++){
+   let j=slots[id*CAP+s];if(j==i){continue;}
+   let q=pin[j];let d=pp-q.xyz;let d2=dot(d,d);let md=rad+q.w;
+   if(d2<md*md&&d2>1e-10){let dist=sqrt(d2);let n=d/dist;corr+=n*(md-dist)*.5;
+    let vn=dot(vv-vin[j].xyz,n);if(vn<0.){dv-=n*vn*.7;}}
+  }}}}
+ pp+=corr*.7;vv+=dv;let sp=length(vv);if(sp>40.){vv*=40./sp;}
+ pp+=vv*u.dt;
+ if(pp.y<rad){pp.y=rad;vv.y=abs(vv.y)*.55;vv.x*=.985;vv.z*=.985;}
+ if(pp.x>u.box-rad){pp.x=u.box-rad;vv.x=-abs(vv.x)*.6;}
+ if(pp.x<-u.box+rad){pp.x=-u.box+rad;vv.x=abs(vv.x)*.6;}
+ if(pp.z>u.box-rad){pp.z=u.box-rad;vv.z=-abs(vv.z)*.6;}
+ if(pp.z<-u.box+rad){pp.z=-u.box+rad;vv.z=abs(vv.z)*.6;}
+ pout[i]=vec4f(pp,rad);vout[i]=vec4f(vv,seed);}`;
+const DRAW=`struct O{@builtin(position) p:vec4f,@location(0) c:vec3f,@location(1) n:vec3f};
+@group(0) @binding(0) var<uniform> mvp:mat4x4f;
+@vertex fn vs(@location(0) v:vec3f,@location(1) ip:vec4f,@location(2) iv:vec4f)->O{
+ var o:O;o.p=mvp*vec4f(ip.xyz+v*ip.w,1.);let t=iv.w+length(iv.xyz)*.04;
+ o.c=.5+.5*cos(6.2831853*(t+vec3f(0.,.33,.67)));o.n=v;return o;}
+@fragment fn fs(o:O)->@location(0) vec4f{
+ let l=max(dot(normalize(o.n),normalize(vec3f(.4,1.,.3))),0.)*.8+.2;return vec4f(o.c*l,1.);}`;
+
+function fail(m){const e=$('err');e.style.display='flex';e.textContent=m;$('hud').style.display='none'}
+async function main(){
+ if(!navigator.gpu)return fail('WebGPU is not available in this browser. Use Chrome (Android 12+ / desktop) or Safari on iPadOS/iOS 26+, and open the page over https.');
+ const ad=await navigator.gpu.requestAdapter();if(!ad)return fail('No GPU adapter found.');
+ const dev=await ad.requestDevice();dev.lost.then(i=>fail('GPU device lost: '+i.message));
+ const fmt=navigator.gpu.getPreferredCanvasFormat(),ctx=cv.getContext('webgpu');ctx.configure({device:dev,format:fmt,alphaMode:'opaque'});
+ const B=(size,usage)=>dev.createBuffer({size,usage}),SV=GPUBufferUsage.STORAGE|GPUBufferUsage.VERTEX;
+ const pos=[B(MAX*16,SV),B(MAX*16,SV)],vel=[B(MAX*16,SV),B(MAX*16,SV)];
+ const counts=B(NC*4,GPUBufferUsage.STORAGE),slots=B(NC*CAP*4,GPUBufferUsage.STORAGE);
+ const ab=new ArrayBuffer(80),U=new Uint32Array(ab),F=new Float32Array(ab);
+ const ub=B(80,GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST),mb=B(64,GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST);
+ const cp=c=>dev.createComputePipeline({layout:'auto',compute:{module:dev.createShaderModule({code:c}),entryPoint:'main'}});
+ const clearP=cp(CLEAR),buildP=cp(BUILD),physP=cp(PHYS);
+ const bg=(p,e)=>dev.createBindGroup({layout:p.getBindGroupLayout(0),entries:e.map((r,i)=>({binding:i,resource:{buffer:r}}))});
+ const clearBG=bg(clearP,[ub,counts]);
+ const buildBG=[0,1].map(k=>bg(buildP,[ub,pos[k],counts,slots]));
+ const physBG=[0,1].map(k=>bg(physP,[ub,pos[k],vel[k],pos[1-k],vel[1-k],counts,slots]));
+ // sphere mesh
+ const vs=[],ix=[],ST=8,SL=12;
+ for(let i=0;i<=ST;i++)for(let j=0;j<=SL;j++){const ph=Math.PI*i/ST,th=2*Math.PI*j/SL;vs.push(Math.sin(ph)*Math.cos(th),Math.cos(ph),Math.sin(ph)*Math.sin(th))}
+ for(let i=0;i<ST;i++)for(let j=0;j<SL;j++){const a=i*(SL+1)+j,b=a+SL+1;ix.push(a,a+1,b,a+1,b+1,b)}
+ const vb=B(vs.length*4,GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST),ib=B(ix.length*4,GPUBufferUsage.INDEX|GPUBufferUsage.COPY_DST);
+ dev.queue.writeBuffer(vb,0,new Float32Array(vs));dev.queue.writeBuffer(ib,0,new Uint32Array(ix));
+ const dm=dev.createShaderModule({code:DRAW}),inst=l=>({arrayStride:16,stepMode:'instance',attributes:[{shaderLocation:l,offset:0,format:'float32x4'}]});
+ const drawP=dev.createRenderPipeline({layout:'auto',
+  vertex:{module:dm,entryPoint:'vs',buffers:[{arrayStride:12,attributes:[{shaderLocation:0,offset:0,format:'float32x3'}]},inst(1),inst(2)]},
+  fragment:{module:dm,entryPoint:'fs',targets:[{format:fmt}]},
+  primitive:{topology:'triangle-list',cullMode:'back',frontFace:'ccw'},
+  depthStencil:{format:'depth24plus',depthWriteEnabled:true,depthCompare:'less'}});
+ const drawBG=bg(drawP,[mb]);
+ let depth,alive=0,cursor=0,cur=0,fr=0,spawnAcc=0,phys=0,fps=60,last=performance.now(),infoT=0;
+ function resize(){const d=Math.min(devicePixelRatio||1,2);cv.width=Math.max(1,innerWidth*d|0);cv.height=Math.max(1,innerHeight*d|0);
+  depth&&depth.destroy();depth=dev.createTexture({size:[cv.width,cv.height],format:'depth24plus',usage:GPUTextureUsage.RENDER_ATTACHMENT})}
+ addEventListener('resize',resize);resize();
+ function loop(now){
+  requestAnimationFrame(loop);
+  const dtf=Math.min((now-last)/1000,.1);last=now;fps=fps*.95+(1/Math.max(dtf,1e-4))*.05;
+  if(doReset){alive=cursor=0;doReset=false}
+  const target=st.inf?MAX:cntV(),rate=rateV(),K=+$('k').value;if(alive>target)alive=target;
+  let gp=[0,0,0];
+  if(grabbing){const q=ray(gsx,gsy),t=gdepth/dot(q.d,q.f);gp=[q.eye[0]+q.d[0]*t,q.eye[1]+q.d[1]*t,q.eye[2]+q.d[2]*t]}
+  phys+=dtf*speedV();let steps=0;
+  while(phys>=DT&&steps<16){
+   phys-=DT;steps++;fr++;spawnAcc+=rate*DT;const n=Math.floor(spawnAcc);spawnAcc-=n;
+   let ss=0,sn=0;
+   if(n>0){if(alive<target){sn=Math.min(n,target-alive);ss=alive;alive+=sn}
+    else if(st.inf){sn=Math.min(n,MAX);ss=cursor;cursor=(cursor+sn)%MAX}}
+   if(!alive)continue;
+   const g=Math.ceil(alive/256);
+   for(let sub=0;sub<K;sub++){
+    U[0]=alive;U[1]=MAX;U[2]=sub?0:ss;U[3]=sub?0:sn;U[4]=fr;U[5]=NC;U[6]=GX;U[7]=GY;U[8]=GZ;
+    F[9]=DT/K;F[10]=st.grav?20:0;F[11]=BOX;F[12]=R;F[13]=sub?0:boom;F[14]=grabbing?1:0;F[15]=+$('g').value;F[16]=CELL;F[17]=gp[0];F[18]=gp[1];F[19]=gp[2];
+    dev.queue.writeBuffer(ub,0,ab);
+    const e=dev.createCommandEncoder(),p=e.beginComputePass();
+    p.setPipeline(clearP);p.setBindGroup(0,clearBG);p.dispatchWorkgroups(Math.ceil(NC/256));
+    p.setPipeline(buildP);p.setBindGroup(0,buildBG[cur]);p.dispatchWorkgroups(g);
+    p.setPipeline(physP);p.setBindGroup(0,physBG[cur]);p.dispatchWorkgroups(g);p.end();
+    dev.queue.submit([e.finish()]);cur=1-cur;
+   }
+   boom=0;
+  }
+  dev.queue.writeBuffer(mb,0,cam().mvp);
+  const e=dev.createCommandEncoder(),rp=e.beginRenderPass({
+   colorAttachments:[{view:ctx.getCurrentTexture().createView(),clearValue:{r:.02,g:.02,b:.05,a:1},loadOp:'clear',storeOp:'store'}],
+   depthStencilAttachment:{view:depth.createView(),depthClearValue:1,depthLoadOp:'clear',depthStoreOp:'store'}});
+  if(alive>0){rp.setPipeline(drawP);rp.setBindGroup(0,drawBG);rp.setVertexBuffer(0,vb);rp.setVertexBuffer(1,pos[cur]);rp.setVertexBuffer(2,vel[cur]);
+   rp.setIndexBuffer(ib,'uint32');rp.drawIndexed(ix.length,alive)}
+  rp.end();dev.queue.submit([e.finish()]);
+  if((infoT+=dtf)>.25){infoT=0;$('info').textContent=`FPS ${fps|0} · balls ${alive.toLocaleString()}`}
+ }
+ requestAnimationFrame(loop);
+}
+main().catch(e=>fail('Error: '+e.message));
+['gesturestart','gesturechange'].forEach(t=>addEventListener(t,e=>e.preventDefault()));
+</script></body></html>
