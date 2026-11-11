@@ -3,237 +3,268 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Local AI Chat</title>
+<title>Local AI Video (frames)</title>
 <style>
   :root {
-    --bg:#f6f7f9; --card:#ffffff; --line:#dfe3e8; --text:#1b1f24; --muted:#667085; --accent:#2f6fed; --accent-text:#ffffff;
-    --user:#e8f0ff; --bot:#f0f2f5; --bad:#d92d20;
+    --bg:#f6f7f9; --card:#ffffff; --line:#dfe3e8; --text:#1b1f24; --muted:#667085; --accent:#2f6fed; --accent-text:#ffffff; --bad:#d92d20;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#0f1115; --card:#1a1d24; --line:#2a2f3a; --text:#e8eaee; --muted:#8a909c; --accent:#6ea8ff; --accent-text:#0b1220;
-            --user:#1f2d4a; --bot:#232731; --bad:#f87171; }
+    :root { --bg:#0f1115; --card:#1a1d24; --line:#2a2f3a; --text:#e8eaee; --muted:#8a909c; --accent:#6ea8ff; --accent-text:#0b1220; --bad:#f87171; }
   }
   * { box-sizing:border-box; }
-  html, body { height:100%; }
-  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; display:flex; flex-direction:column; height:100dvh; }
-  header { padding:10px 16px; border-bottom:1px solid var(--line); background:var(--card); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  header h1 { font-size:1.05rem; margin:0; margin-right:auto; }
-  select, input[type=number], textarea, button { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
-  button { cursor:pointer; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); }
+  header h1 { font-size:1.05rem; margin:0; }
+  .wrap { width:min(760px, 100%); margin:0 auto; padding:16px 16px calc(32px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:14px; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+  label.f { display:flex; flex-direction:column; gap:6px; font-size:.9rem; color:var(--muted); }
+  textarea, select, input[type=number], input[type=text] { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; width:100%; }
+  textarea { min-height:110px; resize:vertical; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; }
+  button { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:9px 14px; cursor:pointer; }
   button:disabled { opacity:.5; cursor:default; }
-  .primary { background:var(--accent); color:var(--accent-text); border:0; font-weight:600; padding:8px 16px; }
-  .panel { padding:10px 16px; border-bottom:1px solid var(--line); background:var(--card); display:flex; flex-direction:column; gap:8px; }
-  .panel[hidden], .banner[hidden] { display:none; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  progress { width:100%; height:10px; accent-color:var(--accent); }
+  .primary { background:var(--accent); color:var(--accent-text); border:0; font-weight:600; min-height:44px; }
+  a.btn { font:inherit; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:9px 14px; text-decoration:none; display:inline-block; }
   .hint { color:var(--muted); font-size:.85rem; }
-  .banner { margin:12px 16px 0; padding:10px 12px; border-radius:8px; background:color-mix(in srgb, var(--bad) 14%, transparent); color:var(--bad); font-size:.9rem; }
-  #msgs { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
-  .msg { max-width:min(760px, 92%); padding:10px 14px; border-radius:14px; overflow-wrap:anywhere; }
-  .msg.user { align-self:flex-end; background:var(--user); white-space:pre-wrap; }
-  .msg.assistant { align-self:flex-start; background:var(--bot); }
-  .msg details { color:var(--muted); font-size:.88rem; margin-bottom:8px; }
-  .msg details div { white-space:pre-wrap; border-left:3px solid var(--line); padding-left:10px; margin-top:4px; }
-  .msg pre { background:rgba(127,127,127,.15); padding:10px; border-radius:8px; overflow-x:auto; margin:8px 0; }
-  .msg code { font-family:ui-monospace,Consolas,monospace; font-size:.9em; background:rgba(127,127,127,.15); padding:1px 5px; border-radius:4px; }
-  .msg pre code { background:none; padding:0; }
-  .msg .err { color:var(--bad); }
-  .empty { margin:auto; color:var(--muted); text-align:center; padding:24px; max-width:420px; }
-  form { display:flex; gap:8px; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--card); }
-  form textarea { flex:1; resize:none; min-height:44px; max-height:160px; }
-  form button { min-height:44px; }
-  #sys { width:100%; min-height:60px; resize:vertical; }
+  .note { background:color-mix(in srgb, var(--accent) 12%, transparent); border-radius:8px; padding:10px 12px; font-size:.9rem; }
+  .banner { padding:10px 12px; border-radius:8px; background:color-mix(in srgb, var(--bad) 14%, transparent); color:var(--bad); font-size:.9rem; }
+  [hidden] { display:none !important; }
+  progress { width:100%; height:10px; accent-color:var(--accent); }
+  canvas, video { width:100%; border-radius:12px; background:#000; }
+  .thumbs { display:flex; flex-wrap:wrap; gap:6px; }
+  .thumbs img { width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Local AI Chat</h1>
-  <button id="settingsBtn" type="button">Settings</button>
-  <button id="clear" type="button">New chat</button>
-</header>
+<header><h1>Local AI Video (frames)</h1></header>
+<div class="wrap">
+  <div class="note">Honest note: this is <b>not</b> a real video AI. A small image AI (SD-Turbo) draws pictures on your graphics card, then this page animates them with zoom, pan and crossfades into a short clip. For real video use the ComfyUI studio. Everything stays on your device.</div>
+  <div class="banner" id="warn" hidden></div>
 
-<div class="panel" id="loader">
-  <div class="row">
-    <select id="model" aria-label="Model"></select>
-    <button class="primary" id="load" type="button">Load model</button>
+  <div class="box" id="loadBox">
+    <b>1. Load the image model</b>
+    <div class="hint">About 2.3 GB, downloaded once and cached. Needs Chrome or Edge 113+ with WebGPU and about 4 GB of graphics memory.</div>
+    <div class="row"><button class="primary" id="load" type="button">Load model</button></div>
+    <progress id="bar" max="100" value="0" hidden></progress>
+    <div class="hint" id="loadText"></div>
   </div>
-  <progress id="bar" max="1" value="0" hidden></progress>
-  <div class="hint" id="loadText">The model runs in this browser on your own graphics card. Nothing you type leaves this device. The first load downloads the model once, then it is cached.</div>
-</div>
 
-<div class="panel" id="settings" hidden>
-  <textarea id="sys" aria-label="System prompt" placeholder="System prompt (how the AI should behave)"></textarea>
-  <div class="row">
-    <label>Temperature <input type="number" id="temp" min="0" max="2" step="0.1" value="0.7" style="width:80px"></label>
-    <span class="hint">Saved in this browser.</span>
+  <div class="box">
+    <b>2. Describe it</b>
+    <label class="f">Mode
+      <select id="mode">
+        <option value="scenes">Scenes – one line per scene (a little story)</option>
+        <option value="dream">Dream – one prompt, several variations that melt into each other</option>
+      </select>
+    </label>
+    <label class="f"><span id="promptLabel">Scenes (one per line, max 8)</span>
+      <textarea id="prompts" placeholder="a sleepy fox in a snowy forest at dawn&#10;the fox runs through glowing trees&#10;the fox looks at the stars"></textarea>
+    </label>
+    <label class="f">Style added to every scene (optional)
+      <input type="text" id="style" placeholder="cinematic, detailed, soft light">
+    </label>
+    <div class="grid">
+      <label class="f">Seconds per scene <input type="number" id="dur" value="3" min="1" max="8" step="0.5"></label>
+      <label class="f" id="countBox" hidden>Variations <input type="number" id="count" value="4" min="2" max="8" step="1"></label>
+      <label class="f">Crossfade (seconds) <input type="number" id="xfade" value="0.8" min="0" max="3" step="0.1"></label>
+      <label class="f">Motion
+        <select id="motion"><option value="random">Random</option><option value="in">Zoom in</option><option value="out">Zoom out</option><option value="pan">Slow pan</option><option value="none">None</option></select>
+      </label>
+      <label class="f">Shape
+        <select id="shape"><option value="wide">Wide 16:9</option><option value="square">Square</option><option value="tall">Tall 9:16</option></select>
+      </label>
+    </div>
+    <div class="row">
+      <button class="primary" id="make" type="button" disabled>Make video</button>
+      <button id="stop" type="button" hidden>Stop</button>
+    </div>
+    <progress id="mbar" max="1" value="0" hidden></progress>
+    <div class="hint" id="makeText">Load the model first.</div>
+    <div class="hint">Keep this tab open and visible while it works. A scene takes a few seconds to draw on a decent graphics card.</div>
+  </div>
+
+  <div class="box" id="preview" hidden>
+    <b>Preview</b>
+    <canvas id="canvas" width="768" height="432"></canvas>
+    <div class="thumbs" id="thumbs"></div>
+  </div>
+
+  <div class="box" id="result" hidden>
+    <b>Your video</b>
+    <video id="player" controls playsinline loop></video>
+    <div class="row"><a class="btn" id="dl" href="#" download="local-ai-video.webm">Download (.webm)</a></div>
   </div>
 </div>
-
-<div class="banner" id="warn" hidden></div>
-<div id="msgs"></div>
-<form id="composer">
-  <textarea id="input" rows="1" placeholder="Load a model first…" disabled></textarea>
-  <button class="primary" id="send" type="submit" disabled>Send</button>
-</form>
 
 <script type="module">
 const $ = s => document.querySelector(s);
-const LIB = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.80/+esm';
-const store = {
-  get(k, d) { try { const v = localStorage.getItem('localai.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem('localai.' + k, JSON.stringify(v)); } catch (e) {} },
+const T2I = 'https://cdn.jsdelivr.net/npm/web-txt2img@0.3.1/dist/index.js';
+const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+const ORT = ORT_BASE + 'ort.webgpu.min.mjs';
+const TJS = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/+esm';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function warn(t) { const w = $('#warn'); w.hidden = !t; w.textContent = t || ''; }
+
+let t2i = null, loaded = false, busy = false, abort = null, lastUrl = null;
+
+/* ---- mode switch ---- */
+$('#mode').onchange = () => {
+  const dream = $('#mode').value === 'dream';
+  $('#countBox').hidden = !dream;
+  $('#promptLabel').textContent = dream ? 'Prompt' : 'Scenes (one per line, max 8)';
+  $('#prompts').placeholder = dream ? 'a neon city in the rain, cyberpunk' : 'a sleepy fox in a snowy forest at dawn\nthe fox runs through glowing trees\nthe fox looks at the stars';
 };
-const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-function md(text) {
-  return text.split('```').map((p, i) => i % 2
-    ? '<pre><code>' + esc(p.replace(/^[^\n]*\n/, '')) + '</code></pre>'
-    : esc(p).replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
-  ).join('');
-}
 
-let webllm = null, engine = null, loading = false, generating = false, loadedId = '';
-let chat = store.get('chat', []);
-
-function warn(text) { const w = $('#warn'); w.hidden = !text; w.textContent = text || ''; }
-
-/* ---- messages ---- */
-function split(raw) {  // Qwen3 and similar put their reasoning in <think>…</think>
-  const m = raw.match(/^\s*<think>([\s\S]*?)(<\/think>|$)/);
-  if (!m) return { think: '', answer: raw, open: false };
-  return { think: m[1].trim(), answer: raw.slice(m[0].length).trim(), open: m[2] === '' };
+/* ---- load the model ---- */
+async function support() {
+  if (!navigator.gpu) return false;
+  try { return !!(await navigator.gpu.requestAdapter()); } catch (e) { return false; }
 }
-function fill(el, m) {
-  if (m.role === 'user') { el.textContent = m.content; return; }
-  const p = split(m.content);
-  let h = '';
-  if (p.think) h += '<details' + (p.open ? ' open' : '') + '><summary>Thinking</summary><div>' + esc(p.think) + '</div></details>';
-  h += md(p.answer);
-  if (m.error) h += '<div class="err">' + esc(m.error) + '</div>';
-  el.innerHTML = h || '…';
-}
-function render() {
-  const box = $('#msgs'); box.textContent = '';
-  if (!chat.length) {
-    const e = document.createElement('div'); e.className = 'empty';
-    e.textContent = engine ? 'Say something to start chatting.' : 'Pick a model above and press “Load model”. Small models are fast but not very smart; bigger ones need more graphics memory.';
-    box.appendChild(e); return;
-  }
-  chat.forEach(m => { const d = document.createElement('div'); d.className = 'msg ' + m.role; fill(d, m); box.appendChild(d); });
-  box.scrollTop = box.scrollHeight;
-}
-function save() { store.set('chat', chat.slice(-60).map(m => ({ role: m.role, content: m.content }))); }
-
-/* ---- model list ---- */
-async function gpuInfo() {
-  if (!navigator.gpu) return { ok: false, f16: false };
-  try { const a = await navigator.gpu.requestAdapter(); return a ? { ok: true, f16: a.features.has('shader-f16') } : { ok: false, f16: false }; }
-  catch (e) { return { ok: false, f16: false }; }
-}
-function fillModels(gpu) {
-  const quant = gpu.f16 ? 'q4f16_1' : 'q4f32_1';
-  const list = webllm.prebuiltAppConfig.model_list
-    .filter(m => !m.model_type && m.model_id.includes(quant) && !/-1k$/.test(m.model_id))
-    .sort((a, b) => a.vram_required_MB - b.vram_required_MB);
-  const sel = $('#model'); sel.textContent = '';
-  list.forEach(m => {
-    const o = document.createElement('option'); o.value = m.model_id;
-    o.textContent = m.model_id.replace(/-q4f\d+_1-MLC$/, '') + ' · needs ~' + (m.vram_required_MB / 1024).toFixed(1) + ' GB';
-    sel.appendChild(o);
-  });
-  const saved = store.get('model', '');
-  const pick = list.find(m => m.model_id === saved) || list.find(m => m.model_id.startsWith('Qwen3-1.7B')) || list.find(m => m.model_id.startsWith('Llama-3.2-1B')) || list[0];
-  if (pick) sel.value = pick.model_id;
-}
-
-/* ---- load ---- */
 $('#load').onclick = async () => {
-  if (loading || !webllm) return;
-  const id = $('#model').value;
-  if (!id) return;
-  loading = true; warn('');
-  $('#load').disabled = true; $('#model').disabled = true; $('#bar').hidden = false; $('#bar').value = 0;
-  $('#input').disabled = true; $('#send').disabled = true;
+  if (loaded || busy) return;
+  warn('');
+  if (!(await support())) { warn('No WebGPU here. Use Chrome or Edge (113 or newer) on a computer with a recent graphics card.'); return; }
+  busy = true; $('#load').disabled = true; $('#bar').hidden = false; $('#loadText').textContent = 'Loading libraries…';
   try {
-    if (engine) { try { await engine.unload(); } catch (e) {} engine = null; }
-    engine = await webllm.CreateMLCEngine(id, {
-      initProgressCallback: r => { $('#bar').value = r.progress || 0; $('#loadText').textContent = r.text || ''; },
+    const [lib, ortMod, tj] = await Promise.all([import(T2I), import(ORT), import(TJS)]);
+    t2i = lib;
+    globalThis.AutoTokenizer = tj.AutoTokenizer; globalThis.env = tj.env;  // the image library picks the tokenizer up from here
+    const ort = ortMod.default ?? ortMod;
+    const res = await t2i.loadModel('sd-turbo', {
+      ort, backendPreference: ['webgpu'], wasmPaths: ORT_BASE,
+      onProgress: p => {
+        if (typeof p.pct === 'number') $('#bar').value = p.pct > 1 ? p.pct : p.pct * 100;
+        $('#loadText').textContent = p.message || (p.asset ? 'Downloading ' + p.asset : 'Loading…');
+      },
     });
-    loadedId = id; store.set('model', id);
-    $('#loadText').textContent = 'Loaded ' + id.replace(/-q4f\d+_1-MLC$/, '') + '. It runs on this device, nothing is sent anywhere.';
-    $('#input').disabled = false; $('#send').disabled = false; $('#input').placeholder = 'Message… (Enter to send, Shift+Enter for a new line)';
-    $('#loader').hidden = true; $('#settingsBtn').textContent = 'Settings'; render(); $('#input').focus();
+    if (!res.ok) throw new Error(res.message || res.reason);
+    loaded = true;
+    $('#loadText').textContent = 'Model ready. It runs on your graphics card.';
+    $('#make').disabled = false; $('#makeText').textContent = 'Ready.';
+    $('#load').textContent = 'Loaded';
   } catch (e) {
-    engine = null;
-    warn('Could not load the model: ' + (e && e.message ? e.message : e) + ' Try a smaller one.');
-    $('#loadText').textContent = '';
-  } finally {
-    loading = false; $('#load').disabled = false; $('#model').disabled = false; $('#bar').hidden = true;
-  }
+    warn('Could not load the model: ' + (e && e.message ? e.message : e));
+    $('#loadText').textContent = ''; $('#load').disabled = false;
+  } finally { busy = false; $('#bar').hidden = true; }
 };
-$('#model').addEventListener('change', () => { if (engine && $('#model').value !== loadedId) $('#loader').hidden = false; });
 
-/* ---- chatting ---- */
-function setGenerating(g) {
-  generating = g;
-  const b = $('#send'); b.textContent = g ? 'Stop' : 'Send'; b.type = g ? 'button' : 'submit';
+/* ---- make the video ---- */
+const SIZES = { wide: [768, 432], square: [512, 512], tall: [432, 768] };
+function plan() {
+  const style = $('#style').value.trim();
+  const base = $('#prompts').value.split('\n').map(s => s.trim()).filter(Boolean);
+  let list;
+  if ($('#mode').value === 'dream') {
+    const n = Math.max(2, Math.min(8, parseInt($('#count').value, 10) || 4));
+    list = base.length ? Array(n).fill(base[0]) : [];
+  } else list = base.slice(0, 8);
+  return list.map(p => style ? p + ', ' + style : p);
 }
-$('#send').addEventListener('click', () => { if (generating && engine) engine.interruptGenerate(); });
-$('#composer').addEventListener('submit', async ev => {
-  ev.preventDefault();
-  const text = $('#input').value.trim();
-  if (!text || generating || !engine) return;
-  $('#input').value = ''; grow();
-  chat.push({ role: 'user', content: text });
-  const reply = { role: 'assistant', content: '', error: '' };
-  chat.push(reply); render();
-  const el = $('#msgs').lastElementChild;
-  setGenerating(true);
-  const sys = $('#sys').value.trim();
-  const temp = parseFloat($('#temp').value);
+function setMake(on) { busy = on; $('#make').disabled = on || !loaded; $('#stop').hidden = !on; $('#mbar').hidden = !on; }
+
+$('#stop').onclick = () => { if (abort) abort.abort(); };
+$('#make').onclick = async () => {
+  if (busy || !loaded) return;
+  const prompts = plan();
+  if (!prompts.length) { $('#makeText').textContent = 'Write at least one prompt.'; return; }
+  warn(''); motions.length = 0; setMake(true); $('#result').hidden = true; $('#preview').hidden = false; $('#thumbs').textContent = '';
+  abort = new AbortController();
+  const [W, H] = SIZES[$('#shape').value];
+  const canvas = $('#canvas'); canvas.width = W; canvas.height = H;
+  const frames = [];
   try {
-    const stream = await engine.chat.completions.create({
-      stream: true, temperature: isNaN(temp) ? 0.7 : temp,
-      messages: [...(sys ? [{ role: 'system', content: sys }] : []), ...chat.slice(0, -1).map(m => ({ role: m.role, content: m.content }))],
-    });
-    for await (const c of stream) {
-      const d = c.choices[0] && c.choices[0].delta && c.choices[0].delta.content;
-      if (d) {
-        reply.content += d;
-        const box = $('#msgs'), near = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-        fill(el, reply); if (near) box.scrollTop = box.scrollHeight;
-      }
+    for (let i = 0; i < prompts.length; i++) {
+      $('#makeText').textContent = 'Drawing picture ' + (i + 1) + ' of ' + prompts.length + '…';
+      $('#mbar').value = i / prompts.length;
+      const seed = Math.floor(Math.random() * 2 ** 31);
+      const r = await t2i.generateImage({
+        model: 'sd-turbo', prompt: prompts[i], seed, signal: abort.signal,
+        onProgress: ev => { if (typeof ev.pct === 'number') $('#mbar').value = (i + (ev.pct > 1 ? ev.pct / 100 : ev.pct)) / prompts.length; },
+      });
+      if (!r.ok) { if (r.reason === 'cancelled') throw new Error('cancelled'); throw new Error(r.message || r.reason); }
+      const bmp = await createImageBitmap(r.blob);
+      frames.push(bmp);
+      const img = document.createElement('img'); img.src = URL.createObjectURL(r.blob); $('#thumbs').appendChild(img);
+      drawFrame(canvas, [{ bmp, a: 1, t: 0, m: pickMotion(i) }]);
     }
-  } catch (e) { reply.error = e && e.message ? e.message : String(e); }
-  setGenerating(false);
-  if (!reply.content && !reply.error) reply.content = '(stopped)';
-  fill(el, reply); save();
-});
-$('#clear').onclick = async () => { if (generating && engine) engine.interruptGenerate(); chat = []; save(); render(); try { if (engine) await engine.resetChat(); } catch (e) {} };
-function grow() { const t = $('#input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 160) + 'px'; }
-$('#input').addEventListener('input', grow);
-$('#input').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); $('#composer').requestSubmit(); } });
-
-/* ---- settings ---- */
-$('#settingsBtn').onclick = () => {
-  if (engine && $('#loader').hidden) { $('#loader').hidden = false; $('#settings').hidden = false; }
-  else $('#settings').hidden = !$('#settings').hidden;
+    $('#makeText').textContent = 'Recording the clip…';
+    const blob = await record(canvas, frames);
+    if (lastUrl) URL.revokeObjectURL(lastUrl);
+    lastUrl = URL.createObjectURL(blob);
+    const pv = $('#player');
+    pv.addEventListener('loadedmetadata', () => {  // recorded files have no length in them; this makes the seek bar work
+      if (pv.duration === Infinity) { pv.currentTime = 1e101; pv.ontimeupdate = () => { pv.ontimeupdate = null; pv.currentTime = 0; }; }
+    }, { once: true });
+    pv.src = lastUrl; $('#dl').href = lastUrl; $('#result').hidden = false; $('#player').play().catch(() => {});
+    $('#makeText').textContent = 'Done.';
+  } catch (e) {
+    $('#makeText').textContent = e.message === 'cancelled' || e.name === 'AbortError' ? 'Stopped.' : '';
+    if (!(e.message === 'cancelled' || e.name === 'AbortError')) warn('Something went wrong: ' + (e && e.message ? e.message : e));
+  } finally { setMake(false); $('#mbar').hidden = true; }
 };
-$('#sys').value = store.get('sys', 'You are a helpful, friendly assistant. Keep answers clear and to the point.');
-$('#temp').value = store.get('temp', 0.7);
-$('#sys').addEventListener('change', () => store.set('sys', $('#sys').value));
-$('#temp').addEventListener('change', () => store.set('temp', $('#temp').value));
 
-/* ---- start ---- */
-render();
-(async () => {
-  $('#load').disabled = true;
-  const gpu = await gpuInfo();
-  if (!gpu.ok) warn('This browser has no WebGPU, so it can\'t run the model. Use Chrome or Edge (version 113 or newer) on a computer or a recent Android phone.');
-  try { webllm = await import(LIB); }
-  catch (e) { warn('Could not load the AI library (no internet?). It is fetched once from a CDN. ' + (e && e.message ? e.message : '')); return; }
-  fillModels(gpu);
-  $('#load').disabled = !gpu.ok;
-})();
+/* ---- animation: slow zoom/pan on every picture, crossfaded ---- */
+const motions = [];
+function pickMotion(i) {
+  if (motions[i]) return motions[i];
+  const m = $('#motion').value;
+  const kind = m === 'random' ? ['in', 'out', 'pan'][Math.floor(Math.random() * 3)] : m;
+  return (motions[i] = { kind, dx: Math.random() * 2 - 1, dy: Math.random() * 2 - 1 });
+}
+function drawFrame(canvas, layers) {
+  const ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+  ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  for (const L of layers) {
+    const { bmp, a, t, m } = L;
+    const zoom = m.kind === 'in' ? 1 + 0.18 * t : m.kind === 'out' ? 1.18 - 0.18 * t : m.kind === 'pan' ? 1.15 : 1;
+    const bw = bmp.width, bh = bmp.height;
+    const ar = W / H;
+    let sw = bw / bh > ar ? bh * ar : bw, sh = bw / bh > ar ? bh : bw / ar;  // biggest crop with the output's shape
+    sw /= zoom; sh /= zoom;
+    const maxX = bw - sw, maxY = bh - sh;
+    let cx = maxX / 2, cy = maxY / 2;
+    if (m.kind === 'pan') { cx = maxX / 2 + (maxX / 2) * m.dx * (t * 2 - 1); cy = maxY / 2 + (maxY / 2) * m.dy * (t * 2 - 1) * 0.6; }
+    else if (m.kind === 'in' || m.kind === 'out') { cx += (maxX / 2) * m.dx * 0.4 * (m.kind === 'in' ? t : 1 - t); cy += (maxY / 2) * m.dy * 0.4 * (m.kind === 'in' ? t : 1 - t); }
+    ctx.globalAlpha = a;
+    ctx.drawImage(bmp, Math.max(0, Math.min(maxX, cx)), Math.max(0, Math.min(maxY, cy)), sw, sh, 0, 0, W, H);
+  }
+  ctx.globalAlpha = 1;
+}
+function record(canvas, frames) {
+  return new Promise((resolve, reject) => {
+    const D = Math.max(1, parseFloat($('#dur').value) || 3);
+    const X = Math.min(D - 0.2, Math.max(0, parseFloat($('#xfade').value) || 0));
+    const n = frames.length, step = D - X, total = n * D - (n - 1) * X;
+    const stream = canvas.captureStream(30);
+    const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    const mime = types.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+    if (!mime) return reject(new Error('This browser can\'t record video from a canvas. Try Chrome or Edge.'));
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
+    const chunks = [];
+    rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = () => resolve(new Blob(chunks, { type: 'video/webm' }));
+    rec.onerror = e => reject(e.error || new Error('Recording failed.'));
+    const t0 = performance.now();
+    rec.start(250);
+    (function tick() {
+      if (abort.signal.aborted) { rec.stop(); return reject(new Error('cancelled')); }
+      const T = (performance.now() - t0) / 1000;
+      const layers = [];
+      for (let i = 0; i < n; i++) {
+        const start = i * step, local = T - start;
+        if (local < 0 || local > D) continue;
+        const a = i > 0 && X > 0 ? Math.min(1, local / X) : 1;
+        layers.push({ bmp: frames[i], a, t: Math.min(1, local / D), m: pickMotion(i) });
+      }
+      if (!layers.length) layers.push({ bmp: frames[n - 1], a: 1, t: 1, m: pickMotion(n - 1) });
+      drawFrame(canvas, layers);
+      $('#mbar').value = Math.min(1, T / total);
+      if (T >= total) { rec.stop(); return; }
+      requestAnimationFrame(tick);
+    })();
+  });
+}
 </script>
 </body>
 </html>
